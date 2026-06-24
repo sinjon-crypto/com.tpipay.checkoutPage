@@ -10,16 +10,6 @@ const getSecureRandomInt = (max) => {
   return Math.floor(getSecureRandom() * max);
 };
 
-// Helper to determine if we are in explicit mock/dev mode.
-// IMPORTANT: This must NEVER be true in production builds.
-// Set VITE_ENABLE_MOCK=true only in .env.development for local testing.
-const shouldMock = () => {
-  return import.meta.env.VITE_ENABLE_MOCK === "true";
-};
-
-const isMockSession = (accessKey) => {
-  return accessKey?.startsWith("TEST_") || shouldMock();
-};
 
 /**
  * Fetch transaction session details using the ACCESS_KEY.
@@ -27,35 +17,6 @@ const isMockSession = (accessKey) => {
  * @param {string} accessKey
  */
 export async function fetchSession(accessKey) {
-  // DEV/TEST ONLY: If mock mode is active, return a simulated session.
-  // Amount is intentionally omitted here; it must always come from the real API.
-  // This branch is unreachable in production (VITE_ENABLE_MOCK is not set).
-  if (isMockSession(accessKey)) {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    const sessionCreatedAt = Date.now();
-    return {
-      status: "success",
-      data: {
-        merchant_name: "TpiPay Secure Commerce [TEST]",
-        merchant_logo: "",
-        // No hardcoded amount — mock sessions must use a realistic placeholder
-        // only if the backend truly cannot be reached in a test environment.
-        amount: null,
-        currency: "INR",
-        txnid: `TXN${Math.floor(100000000 + getSecureRandom() * 900000000)}`,
-        orderId: `ORD-${Date.now()}`,
-        merchantRef: `MREF-${getSecureRandomInt(999999).toString().padStart(6, "0")}`,
-        customer_name: "Test User",
-        customer_email: "test@example.com",
-        customer_phone: "9999999999",
-        allowed_modes: ["UPI", "Netbanking", "Cards"],
-        sessionCreatedAt,
-        sessionExpiresAt: sessionCreatedAt + 15 * 60 * 1000,
-        paymentStatus: "INITIATED",
-      }
-    };
-  }
-
   // PRODUCTION PATH: Always fetch the real session from the backend.
   const response = await fetch(`${API_BASE_URL}/api/payment/session/${accessKey}`, {
     method: "GET",
@@ -89,25 +50,6 @@ export async function fetchSession(accessKey) {
  */
 export async function verifyUpiId(upiId, accessKey) {
   try {
-    if (isMockSession(accessKey)) {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      // Simulate realistic UPI validation
-      const isValidFormat = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId);
-      if (!isValidFormat) {
-        return { valid: false, accountName: null, error: "Invalid UPI ID format" };
-      }
-      // Simulate some known invalid VPAs
-      if (upiId.toLowerCase().includes("invalid") || upiId.toLowerCase().includes("test@fail")) {
-        return { valid: false, accountName: null, error: "VPA not found or inactive" };
-      }
-      const mockNames = ["Rahul Sharma", "Priya Patel", "Amit Kumar", "Sunita Verma", "John Doe"];
-      return {
-        valid: true,
-        accountName: mockNames[getSecureRandomInt(mockNames.length)],
-        error: null
-      };
-    }
-
     const response = await fetch(`${API_BASE_URL}/api/payment/upi/verify`, {
       method: "POST",
       headers: {
@@ -142,16 +84,6 @@ export async function verifyUpiId(upiId, accessKey) {
  */
 export async function generateQrCode(accessKey, sessionData) {
   try {
-    if (isMockSession(accessKey)) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const qrData = `upi://pay?pa=tpipay@gateway&pn=${encodeURIComponent(sessionData?.merchant_name || "TpiPay")}&am=${sessionData?.amount}&cu=INR&tn=${sessionData?.txnid || ""}`;
-      return {
-        qrData,
-        qrImage: null, // Will use text-based QR in UI
-        expiresAt: sessionData?.sessionExpiresAt || (Date.now() + 15 * 60 * 1000)
-      };
-    }
-
     const response = await fetch(`${API_BASE_URL}/api/payment/qr/generate`, {
       method: "POST",
       headers: {
@@ -190,11 +122,6 @@ export async function generateQrCode(accessKey, sessionData) {
  */
 export async function pollPaymentStatus(accessKey) {
   try {
-    if (isMockSession(accessKey)) {
-      // In mock mode, always return PENDING (real payment won't happen)
-      return { status: "PENDING", message: "Awaiting payment confirmation" };
-    }
-
     const response = await fetch(`${API_BASE_URL}/api/payment/status/${accessKey}`, {
       method: "GET",
       headers: {
@@ -222,24 +149,6 @@ export async function pollPaymentStatus(accessKey) {
 export async function processPayment(payload) {
   try {
     const { access_key } = payload;
-
-    if (isMockSession(access_key)) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const rand = getSecureRandom();
-      if (rand < 0.8) {
-        return {
-          status: "success",
-          message: "Payment processed successfully.",
-          transaction_id: `TXN_${Date.now()}`,
-          payment_method: payload.payment_mode,
-          timestamp: new Date().toISOString()
-        };
-      } else if (rand < 0.9) {
-        return { status: "failed", message: "Transaction declined by card issuer.", reason: "CARD_DECLINED" };
-      } else {
-        return { status: "pending", message: "Transaction is pending bank approval.", reason: "BANK_PENDING" };
-      }
-    }
 
     const response = await fetch(`${API_BASE_URL}/api/payment/pay`, {
       method: "POST",

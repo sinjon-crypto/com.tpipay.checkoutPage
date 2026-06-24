@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { fetchSession, processPayment, verifyUpiId, generateQrCode, pollPaymentStatus } from "./services/paymentService";
 import SessionTimer from "./components/SessionTimer";
 import OutcomeScreen from "./components/OutcomeScreen";
 
-export default function CheckoutPage({ accessKey }) {
+export default function CheckoutPage() {
+  const { accessKey } = useParams();
   // Page states
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
